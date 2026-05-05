@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GROOVE-WORKS 経営ダッシュボード</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.4/babel.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Noto Sans JP', sans-serif; background: #0f172a; color: #e2e8f0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+const { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Area } = Recharts;
+
+// ===== 設定（この2行だけ書き換え） =====
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw4rzrKAeeb0tsisSgPvBtWaRu_85TaxsccN1naJ8FdVDq7LGYNwZ3xOPGjexNN851h/exec";
+const API_KEY = "GROOVEWORKS-2026";
+// ========================================
+
+const COLORS = ["#3b82f6","#22c55e","#f59e0b","#ef4444","#a78bfa","#ec4899","#06b6d4","#f97316","#6b7280","#8b5cf6"];
+const ACCT_COLORS = {"飯能信金":"#3b82f6","青梅信金":"#22c55e","JPN(P)":"#f59e0b","JPN(I)":"#f97316","きらぼし銀行":"#ec4899"};
+const fmt = v => { if(v>=1e8) return (v/1e8).toFixed(1)+"億"; if(v>=1e4) return Math.round(v/1e4).toLocaleString()+"万"; return v.toLocaleString(); };
+const fmtYen = v => "¥"+Number(v).toLocaleString();
+
+function useWidth(){const[w,setW]=useState(window.innerWidth);useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h)},[]);return w;}
+
+const KPI=({label,value,sub,color,subColor,m})=>(<div style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",borderRadius:12,padding:m?"14px 16px":"18px 20px",flex:1,minWidth:m?140:180,border:"1px solid #334155"}}><div style={{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:6}}>{label}</div><div style={{fontSize:m?20:24,fontWeight:900,color:color||"#f1f5f9",letterSpacing:"-0.5px"}}>{value}</div>{sub&&<div style={{fontSize:11,color:subColor||"#64748b",marginTop:4,fontWeight:600}}>{sub}</div>}</div>);
+
+const Card=({title,children,wide})=>(<div style={{background:"#1e293b",borderRadius:12,padding:"16px 20px",border:"1px solid #334155",gridColumn:wide?"1/-1":undefined}}><div style={{fontSize:13,fontWeight:700,color:"#e2e8f0",marginBottom:12}}>{title}</div>{children}</div>);
+
+const CTip=({active,payload,label})=>{if(!active||!payload)return null;return(<div style={{background:"#0f172a",border:"1px solid #334155",borderRadius:8,padding:"10px 14px",fontSize:12}}><div style={{color:"#e2e8f0",fontWeight:700,marginBottom:4}}>{label}</div>{payload.map((p,i)=>(<div key={i} style={{color:p.color,marginBottom:2}}>{p.name}: {fmtYen(p.value)}</div>))}</div>);};
+
+function App(){
+  const[tab,setTab]=useState("overview");
+  const w=useWidth();const m=w<810;
+  const c2=m?"1fr":"1fr 1fr";const c3=m?"1fr":"1fr 1fr 1fr";const c15=m?"1fr":"1.5fr 1fr";
+  const[data,setData]=useState(null);const[loading,setLoading]=useState(true);const[error,setError]=useState(null);
+
+  useEffect(()=>{
+    fetch(GAS_URL+"?key="+encodeURIComponent(API_KEY))
+      .then(r=>r.json()).then(d=>{if(d.error){setError(d.error)}else{setData(d)}setLoading(false)})
+      .catch(e=>{setError(e.message);setLoading(false)});
+  },[]);
+
+  if(loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:900,marginBottom:12}}>GROOVE-WORKS</div><div style={{color:"#64748b"}}>データ取得中...</div></div></div>;
+  if(error) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:900,marginBottom:12,color:"#ef4444"}}>エラー</div><div style={{color:"#94a3b8",fontSize:13}}>{error}</div></div></div>;
+  if(!data) return null;
+
+  const sales=data.sales||[];const tx=data.transactions||{};const monthly=tx.monthly||[];const byCategory=tx.byCategory||[];const byAccount=tx.byAccount||[];const balanceTrend=tx.accountBalanceTrend||[];const custSales=tx.customerSales||[];const fixedExp=data.fixedExpenses||{items:[],monthlyTotal:0};const loans=data.loans||{items:[],monthlyTotal:0};const payoff=data.payoffTimeline||[];
+
+  const salesChart=sales.map(s=>({month:s.month+"月",actual:s.totalSales,budget:s.budget,prevYear:s.prevYearSales,rate:s.budget>0?Math.round(s.totalSales/s.budget*100):0}));
+  const latest=sales.length>0?sales[sales.length-1]:null;
+  const cumS=sales.reduce((a,s)=>a+(s.totalSales||0),0);const cumB=sales.reduce((a,s)=>a+(s.budget||0),0);
+  const totBal=byAccount.reduce((a,x)=>a+(x.lastBalance||0),0);
+  const sortAcct=[...byAccount].sort((a,b)=>b.lastBalance-a.lastBalance);
+  const acctNames=[...new Set(byAccount.map(a=>a.name))];
+  const balChart=balanceTrend.map(bt=>{const r={month:String(bt.yearMonth).replace(/^\d{4}-?/,"").replace(/^0/,"")+"月"};acctNames.forEach(n=>{r[n]=bt[n]||0});return r});
+  const cfChart=monthly.map(x=>({month:String(x.yearMonth).replace(/^\d{4}-?/,"").replace(/^0/,"")+"月",income:x.income,expense:x.expense,diff:x.income-x.expense}));
+  const topC=custSales.slice(0,5);const otherC=custSales.slice(5).reduce((a,c)=>a+c.value,0);
+  const custChart=[...topC.map((c,i)=>({...c,color:COLORS[i]}))];if(otherC>0)custChart.push({name:"その他",value:otherC,color:COLORS[6]});
+
+  const now=new Date();const nowYM=now.getFullYear()+"/"+String(now.getMonth()+1).padStart(2,"0");
+  const doneN=payoff.filter(p=>p.endDate<=nowYM).length;const remainN=payoff.length-doneN;
+  const totReduc=payoff.reduce((a,p)=>a+p.monthly,0);
+  const nextP=payoff.filter(p=>p.endDate>nowYM).sort((a,b)=>a.endDate.localeCompare(b.endDate))[0];
+
+  return(<div>
+    <div style={{background:"linear-gradient(90deg,#1e293b,#0f172a)",borderBottom:"1px solid #334155",padding:m?"12px 16px":"16px 24px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+        <div><div style={{fontSize:m?17:20,fontWeight:900,color:"#f1f5f9"}}>GROOVE-WORKS</div><div style={{fontSize:11,color:"#64748b",fontWeight:600}}>経営ダッシュボード ｜ 最終更新: {data.updatedAt?new Date(data.updatedAt).toLocaleString("ja-JP"):""}</div></div>
+        <div style={{display:"flex",gap:4,background:"#334155",borderRadius:8,padding:3}}>
+          {[["overview","経営概況"],["cashflow","資金繰り"],["payoff","完済タイムライン"]].map(([k,v])=>(<button key={k} onClick={()=>setTab(k)} style={{padding:"6px 16px",borderRadius:6,border:"none",background:tab===k?"#2563eb":"transparent",color:tab===k?"#fff":"#94a3b8",fontSize:12,fontWeight:700,cursor:"pointer"}}>{v}</button>))}
+        </div>
+      </div>
+    </div>
+
+    <div style={{padding:m?"16px":"20px 24px"}}>
+
+      {tab==="overview"&&(<>
+        <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+          <KPI m={m} label={"直近月売上（"+(latest?latest.month:"")+"月）"} value={latest?fmtYen(latest.totalSales):"—"} sub={latest&&latest.budget?"予算比 "+Math.round(latest.totalSales/latest.budget*100)+"%":""} color="#60a5fa" subColor={latest&&latest.totalSales>=latest.budget?"#22c55e":"#ef4444"}/>
+          <KPI m={m} label="年度累計売上" value={fmtYen(cumS)} sub={sales.length+"ヶ月合計"} color="#4ade80"/>
+          <KPI m={m} label="口座合計残高" value={fmtYen(totBal)} color="#a78bfa"/>
+          <KPI m={m} label="年度予算達成率" value={cumB>0?Math.round(cumS/cumB*100)+"%":"—"} sub={"予算 "+fmtYen(cumB)} color="#fb923c"/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:c15,gap:16,marginBottom:16}}>
+          <Card title="月別売上推移（実績 vs 予算 vs 前年）"><ResponsiveContainer width="100%" height={240}><ComposedChart data={salesChart}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis dataKey="month" tick={{fill:"#94a3b8",fontSize:11}}/><YAxis tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={fmt}/><Tooltip content={<CTip/>}/><Legend wrapperStyle={{fontSize:11}}/><Bar dataKey="actual" name="実績" fill="#3b82f6" radius={[4,4,0,0]}/><Line dataKey="budget" name="予算" stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 3" dot={false}/><Line dataKey="prevYear" name="前年" stroke="#6b7280" strokeWidth={1.5} dot={false}/></ComposedChart></ResponsiveContainer></Card>
+          <Card title="取引先別 売上構成比"><ResponsiveContainer width="100%" height={240}><PieChart><Pie data={custChart} dataKey="value" nameKey="name" cx="50%" cy="42%" innerRadius={45} outerRadius={78} paddingAngle={2} label={({percent})=>(percent*100).toFixed(0)+"%"} labelLine={false}>{custChart.map((c,i)=><Cell key={i} fill={c.color||COLORS[i]}/>)}</Pie><Tooltip formatter={v=>fmtYen(v)}/><Legend wrapperStyle={{fontSize:11}}/></PieChart></ResponsiveContainer></Card>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:c3,gap:16,marginBottom:16}}>
+          <Card title="口座合計残高推移"><ResponsiveContainer width="100%" height={240}><LineChart data={balChart}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis dataKey="month" tick={{fill:"#94a3b8",fontSize:10}}/><YAxis tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={fmt}/><Tooltip content={<CTip/>}/><Legend wrapperStyle={{fontSize:10}}/>{acctNames.map((n,i)=>(<Line key={n} dataKey={n} name={n} stroke={ACCT_COLORS[n]||COLORS[i%COLORS.length]} strokeWidth={1.5} dot={false}/>))}</LineChart></ResponsiveContainer></Card>
+          <Card title="カテゴリ別支出 TOP10"><ResponsiveContainer width="100%" height={240}><BarChart data={byCategory.slice(0,10)} layout="vertical" margin={{left:10}}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis type="number" tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={fmt}/><YAxis type="category" dataKey="name" tick={{fill:"#94a3b8",fontSize:10}} width={90}/><Tooltip formatter={v=>fmtYen(v)}/><Bar dataKey="value" name="支出額" radius={[0,4,4,0]}>{byCategory.slice(0,10).map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}</Bar></BarChart></ResponsiveContainer></Card>
+          <Card title="月別予算達成率"><ResponsiveContainer width="100%" height={240}><BarChart data={salesChart}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis dataKey="month" tick={{fill:"#94a3b8",fontSize:10}}/><YAxis tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={v=>v+"%"} domain={[0,150]}/><Tooltip formatter={v=>v+"%"}/><Bar dataKey="rate" name="達成率" radius={[4,4,0,0]}>{salesChart.map((d,i)=><Cell key={i} fill={d.rate>=100?"#22c55e":d.rate>=80?"#f59e0b":"#ef4444"}/>)}</Bar></BarChart></ResponsiveContainer>
+            <div style={{display:"flex",gap:12,marginTop:4,justifyContent:"center"}}>{[["#22c55e","100%↑"],["#f59e0b","80〜99%"],["#ef4444","80%↓"]].map(([c,l])=>(<div key={l} style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#94a3b8"}}><div style={{width:8,height:8,borderRadius:2,background:c}}/>{l}</div>))}</div>
+          </Card>
+        </div>
+      </>)}
+
+      {tab==="cashflow"&&(<>
+        <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+          <KPI m={m} label="口座合計残高" value={fmtYen(totBal)} color="#a78bfa"/>
+          <KPI m={m} label="月額固定費合計" value={fmtYen(fixedExp.monthlyTotal)} color="#ef4444"/>
+          <KPI m={m} label="うち融資・リース返済" value={fmtYen(loans.monthlyTotal)} color="#f59e0b"/>
+          <KPI m={m} label="固定費項目数" value={fixedExp.items.length+"件"} color="#60a5fa"/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:c2,gap:16,marginBottom:16}}>
+          <Card title="月別 入金 vs 出金 vs 差引"><ResponsiveContainer width="100%" height={260}><ComposedChart data={cfChart}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis dataKey="month" tick={{fill:"#94a3b8",fontSize:11}}/><YAxis tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={fmt}/><Tooltip content={<CTip/>}/><Legend wrapperStyle={{fontSize:11}}/><Bar dataKey="income" name="入金" fill="#3b82f6" radius={[4,4,0,0]}/><Bar dataKey="expense" name="出金" fill="#ef4444" radius={[4,4,0,0]}/><Line dataKey="diff" name="差引" stroke="#22c55e" strokeWidth={2} dot={{r:3}}/></ComposedChart></ResponsiveContainer></Card>
+          <Card title="口座別残高"><div style={{marginTop:8}}>{sortAcct.filter(a=>a.lastBalance>0).map(a=>{const pct=totBal>0?(a.lastBalance/totBal*100):0;const cl=ACCT_COLORS[a.name]||"#6b7280";return(<div key={a.name} style={{marginBottom:14}}><div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"#e2e8f0",fontWeight:600}}>{a.name}</span><span style={{color:cl,fontWeight:700}}>{fmtYen(a.lastBalance)}</span></div><div style={{background:"#334155",borderRadius:4,height:8}}><div style={{background:cl,borderRadius:4,height:8,width:pct+"%"}}/></div></div>)})}</div></Card>
+        </div>
+        <Card title="固定費内訳" wide><div style={{display:"grid",gridTemplateColumns:m?"1fr":"1fr 1fr 1fr",gap:"4px 24px",fontSize:12}}>{fixedExp.items.map((it,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #334155"}}><span style={{color:"#94a3b8"}}>{it.category} / {it.description}</span><span style={{color:"#e2e8f0",fontWeight:600,flexShrink:0,marginLeft:8}}>{fmtYen(it.monthly)}</span></div>))}</div></Card>
+      </>)}
+
+      {tab==="payoff"&&(<>
+        <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+          <KPI m={m} label="完済済み" value={doneN+"件"} color="#22c55e"/>
+          <KPI m={m} label="残り" value={remainN+"件"} color="#f59e0b"/>
+          <KPI m={m} label="次の完済" value={nextP?nextP.lender+" "+nextP.endDate:"—"} sub={nextP?"月額 "+fmtYen(nextP.monthly)+" の削減":""} color="#60a5fa" subColor="#22c55e"/>
+          <KPI m={m} label="全完済後の月額削減" value={fmtYen(totReduc)} color="#a78bfa"/>
+        </div>
+        <Card title="完済タイムライン" wide><div style={{marginTop:8}}>{payoff.map((p,i)=>{const done=p.endDate<=nowYM;const maxM=(2034-2024)*12;const pts=p.endDate.split("/");const eM=(parseInt(pts[0])-2024)*12+(parseInt(pts[1])||0);const wP=Math.min(eM/maxM*100,100);return(<div key={i} style={{display:"flex",alignItems:"center",gap:m?6:12,marginBottom:8,fontSize:m?11:12,flexWrap:m?"wrap":"nowrap"}}><div style={{minWidth:m?120:220,color:done?"#22c55e":"#e2e8f0",fontWeight:600,textDecoration:done?"line-through":"none"}}>{done?"✅ ":""}{p.lender} {p.content}</div><div style={{flex:1,minWidth:m?"100%":200,background:"#334155",borderRadius:4,height:24,overflow:"hidden"}}><div style={{width:wP+"%",height:"100%",borderRadius:4,background:done?"#22c55e":wP>70?"#3b82f6":wP>40?"#f59e0b":"#ef4444",display:"flex",alignItems:"center",paddingLeft:8,color:"#fff",fontSize:10,fontWeight:700}}>{p.endDate}</div></div><div style={{minWidth:100,textAlign:"right",color:"#94a3b8"}}>月額 {fmtYen(p.monthly)}</div></div>)})}</div></Card>
+        <div style={{display:"grid",gridTemplateColumns:c2,gap:16,marginTop:16}}>
+          <Card title="累計削減効果"><ResponsiveContainer width="100%" height={240}><ComposedChart data={payoff.filter(p=>p.cumReduction>0)}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis dataKey="endDate" tick={{fill:"#94a3b8",fontSize:10}}/><YAxis tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={fmt}/><Tooltip formatter={v=>fmtYen(v)}/><Area dataKey="cumReduction" name="累計削減" fill="#22c55e" fillOpacity={0.2} stroke="#22c55e" strokeWidth={2}/></ComposedChart></ResponsiveContainer></Card>
+          <Card title="マイルストーン"><div style={{fontSize:12,lineHeight:2}}>{payoff.map((p,i)=>{const done=p.endDate<=nowYM;const cl=done?"#22c55e":p.monthly>=1e5?"#ef4444":p.monthly>=2e4?"#f59e0b":"#3b82f6";return(<div key={i} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"4px 0",borderBottom:"1px solid #334155"}}><span style={{color:cl,fontWeight:700,minWidth:70,flexShrink:0}}>{p.endDate}</span><span style={{color:done?"#64748b":"#e2e8f0",flex:1,textDecoration:done?"line-through":"none"}}>{p.lender} {p.content}</span><span style={{color:"#94a3b8",flexShrink:0}}>月{fmtYen(p.monthly)}</span>{p.note&&<span style={{color:cl,fontWeight:700,fontSize:10,background:cl+"20",padding:"2px 8px",borderRadius:99,flexShrink:0}}>{p.note}</span>}</div>)})}</div></Card>
+        </div>
+      </>)}
+
+      <div style={{textAlign:"center",padding:"24px 0 8px",fontSize:10,color:"#475569"}}>GROOVE-WORKS 経営ダッシュボード ｜ 自動取得</div>
+    </div>
+  </div>);
+}
+
+ReactDOM.render(<App/>, document.getElementById("root"));
+</script>
+</body>
+</html>
