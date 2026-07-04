@@ -116,10 +116,19 @@ function App(){
  const[live,setLive]=useState(false);
  const[err,setErr]=useState(null);
  const[op,setOp]=useState({orders:false,tl:false,sim:false,trend:false});
+ const[exp,setExp]=useState(null);   // 記載漏れの保険（層1・期待エンジン fn=expect）
  const t=TOK[theme];
  const W=useWidth();const sm=W<860;
 
  useEffect(()=>{
+  // 記載漏れの保険は命綱＝取得失敗時は自動で再試行（最大4回・4秒間隔）。黙って諦めない
+  var dead=false;
+  var goExp=function(n){
+   fetch(ENGINE_URL+"?key="+encodeURIComponent(ENGINE_KEY)+"&fn=expect").then(r=>r.json())
+    .then(function(x){if(dead)return; if(x&&!x.error)setExp(x); else if(n>0)setTimeout(function(){goExp(n-1);},4000);})
+    .catch(function(){if(!dead&&n>0)setTimeout(function(){goExp(n-1);},4000);});
+  };
+  goExp(4);
   Promise.all([
    fetch(GAS_URL+"?key="+encodeURIComponent(API_KEY)).then(r=>r.json()),
    fetch(ENGINE_URL+"?key="+encodeURIComponent(ENGINE_KEY)+"&fn=dashtx").then(r=>r.json()).catch(function(){return null;})
@@ -158,6 +167,7 @@ function App(){
     setD(nd);setLive(true);
    }catch(e){setErr('データ整形エラー: '+e.message);}
   }).catch(e=>setErr(e.message));
+  return function(){dead=true;};
  },[]);
 
  const latest=d.sales.length?d.sales[d.sales.length-1]:0;
@@ -277,14 +287,33 @@ function App(){
  </div>);
 
  const acctBar=(k)=>({green:t.green,red:t.red,amber:t.amber,gray:t.gray})[k];
+ // 記載漏れの保険：履歴から自動登録した「毎月来るはずの支払い」と今月の取引DBを突き合わせ、「無い」を検出して表示
+ const trunc=(s,n)=>{s=String(s||'');return s.length>n?s.slice(0,n)+'…':s;};
+ const Insure=()=>{
+  if(!exp){return(<Note kind="amber"><b>記載漏れの保険：</b>監視データを取得中です（届くまで自動で再試行）。取得できるまで「異常なし」とは表示しません。</Note>);}
+  const late=exp['⚠遅れ・無い']||[],wait=exp['これから']||[],done=exp['済']||[];
+  const ymp=String(exp.対象月||'').split('-');const when=(ymp[1]?(+ymp[1])+'月':'')+exp.今日+'日時点';
+  const next=wait[0];const bad=late.length>0;
+  return(<div style={{background:bad?t.redBg:t.panel,border:'1px solid '+(bad?t.redBd:t.border),borderLeft:'4px solid '+(bad?t.red:t.green),borderRadius:16,padding:'14px 16px',marginBottom:12}}>
+   <div style={{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}}>
+    <span style={{fontSize:13.5,fontWeight:700,color:bad?t.red:t.green}}>{bad?'⚠ 来るはずなのに、まだ無い ・ '+late.length+'件':'✅ 記載漏れなし（'+when+'）'}</span>
+    <span style={{fontSize:11,color:t.muted}}>過去6ヶ月の実績から 毎月の定期先 {exp.定期先合計}件 を自動監視</span>
+   </div>
+   {late.map((x,i)=>(<div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'9px 11px',background:t.panel,borderRadius:8,marginTop:8}}>
+    <span style={{fontSize:12.5,color:t.text}}>{trunc(x.先,26)}</span>
+    <span className="mono" style={{fontSize:12.5,color:t.red,fontWeight:600,whiteSpace:'nowrap'}}>いつも{x.いつもの日}日ごろ ・ 約{yen(x.いつもの額)}</span>
+   </div>))}
+   <div style={{fontSize:11.5,color:t.text2,marginTop:8}}>今月 記録済み {done.length}件{next?(' ・ 次に来るはず：'+trunc(next.先,14)+'（'+next.いつもの日+'日ごろ ・ 約'+yen(next.いつもの額)+'）'):''}</div>
+  </div>);
+ };
  const Cash=()=>(<div>
   <SecHead n="③" title="資金" nc={t.amber} q="今日を、落とさないか ─ 入金・支出・残高と、危ない口座の手当て"/>
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:12,marginBottom:12}}>
-   {[['口座合計残高',yen(totBal),t.violet,(d.acctsLive?d.acctsLive.length:5)+'口座合計'],['今月の支出予定',d.fixedTotal?yen(d.fixedTotal):'¥2,850,000',t.red,'融資・リース・固定費'],['今月の入金予定','¥4,941,200',t.green,'Salesforce商談ベース（未確定）'],['月末残高予測','¥7,813,832',t.sky,'入金−支出後（未確定）'],['残高不足口座','2口座',t.red,'きらぼし・飯能']].map((k,i)=>(
+   {[['口座合計残高',yen(totBal),t.violet,(d.acctsLive?d.acctsLive.length:5)+'口座合計'],['今月の支出予定',d.fixedTotal?yen(d.fixedTotal):'¥2,850,000',t.red,'融資・リース・固定費'],['今月の入金予定','¥4,941,200',t.green,'Salesforce商談ベース（未確定）'],['月末残高予測','¥7,813,832',t.sky,'入金−支出後（未確定）'],['残高不足の判定','—',t.gray,'③MF接続後に自動化（未接続）']].map((k,i)=>(
     <div key={i} style={{background:t.panel,border:"1px solid "+t.border,borderLeft:"4px solid "+k[2],borderRadius:16,padding:"14px 15px"}}><div style={{fontSize:11,color:t.text2,marginBottom:7}}>{k[0]}</div><div className="mono" style={{fontSize:20,fontWeight:700,color:k[2]}}>{k[1]}</div><div style={{fontSize:11,color:t.muted,marginTop:5}}>{k[3]}</div></div>
    ))}
   </div>
-  <Note kind="red"><b>残高不足アラート ・ 2口座</b> ／ きらぼし：27日のリース・ローン引落しまでに約 ¥638,284 不足。飯能信金：20日の融資返済までに約 ¥635,384 不足。<b>→ 10日の入金後すぐ資金移動。</b></Note>
+  <Insure/>
   <div style={{fontSize:13,fontWeight:600,color:t.text,margin:"18px 0 10px"}}>口座ごとの状態</div>
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(175px,1fr))',gap:12}}>
    {(d.acctsLive?d.acctsLive.map(a=>{const seed=SEED.accts.find(x=>a.n.indexOf(x.n)>=0||x.n.indexOf(a.n)>=0)||{};return{...seed,n:a.n,bal:a.bal};}):d.accts).map((a,i)=>(
@@ -295,7 +324,7 @@ function App(){
     </div>
    ))}
   </div>
-  <Drill k="tl" title="今月の入出金タイムライン" sub="日付ごとの全明細">
+  <Drill k="tl" title="今月の入出金タイムライン" sub="表示例（ダミー）・③MF接続後に実数化">
    <div style={{marginTop:6}}>{d.timeline.map((r,i)=>{const bg=r.k==='in'?t.greenBg:r.k==='danger'?t.redBg:r.k==='warn'?t.amberBg:'transparent';return(
     <div key={i} style={{display:'grid',gridTemplateColumns:'52px 1fr auto',gap:10,alignItems:'center',padding:"10px 8px",borderRadius:8,background:bg,marginBottom:2}}>
      <span className="mono" style={{fontSize:12,fontWeight:600,color:t.text2}}>{r.d}</span>
@@ -303,7 +332,7 @@ function App(){
      <span className="mono" style={{fontSize:13,fontWeight:600,color:r.a>=0?t.green:t.red}}>{r.a>=0?'+':'−'}¥{Math.abs(r.a).toLocaleString()}</span>
     </div>);})}</div>
   </Drill>
-  <Drill k="sim" title="資金移動シミュレーション" sub="移動前→移動→移動後 ＋実行手順">
+  <Drill k="sim" title="資金移動シミュレーション" sub="表示例（ダミー）・③MF接続後に実数化 ─ 移動前→移動→移動後 ＋実行手順">
    <div style={{overflowX:'auto',marginTop:8}}><div style={{minWidth:540}}>
     <div style={{display:'grid',gridTemplateColumns:'90px repeat(4,1fr)',gap:6,fontSize:12}}>
      <div></div>{d.sim.cols.map((c,i)=><div key={i} style={{textAlign:'right',color:t.text2,fontWeight:600,padding:"6px 8px"}}>{c}</div>)}
