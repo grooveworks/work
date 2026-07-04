@@ -4,141 +4,385 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GROOVE-WORKS 経営ダッシュボード</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/react-is@18/umd/react-is.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/3.2.1/Recharts.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Noto Sans JP', sans-serif; background: #0f172a; color: #e2e8f0; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:"SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.navline{width:2px;height:10px;margin-left:23px}
+.recharts-wrapper{font-size:11px}
+::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:rgba(148,163,184,.3);border-radius:4px}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect } = React;
-const { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Area } = Recharts;
+const {useState,useEffect}=React;
+const {ComposedChart,BarChart,LineChart,PieChart,Pie,Cell,Bar,Line,Area,AreaChart,XAxis,YAxis,CartesianGrid,Tooltip,Legend,ResponsiveContainer}=Recharts;
 
-// ===== 設定（この2行だけ書き換え） =====
-const GAS_URL = "https://script.google.com/macros/s/AKfycbw4rzrKAeeb0tsisSgPvBtWaRu_85TaxsccN1naJ8FdVDq7LGYNwZ3xOPGjexNN851h/exec";
-const API_KEY = "GROOVEWORKS-2026";
-// ========================================
+const GAS_URL="https://script.google.com/macros/s/AKfycbw4rzrKAeeb0tsisSgPvBtWaRu_85TaxsccN1naJ8FdVDq7LGYNwZ3xOPGjexNN851h/exec";
+const API_KEY="GROOVEWORKS-2026";
+// 資金繰り(取引・残高)は検証済み取引DB(妻の口座管理R7から再構築)を、読み取り専用キーで直接読む。売上等は従来どおり。
+const ENGINE_URL="https://script.google.com/macros/s/AKfycbwzZC-FNuFjfwRKTgIkVR1TRIxdia6BEThEU0zFagDxlcEria3EUWesQ53ndCyvGD9M/exec";
+const ENGINE_KEY="GROOVE-DASH-2026";
 
-const COLORS = ["#3b82f6","#22c55e","#f59e0b","#ef4444","#a78bfa","#ec4899","#06b6d4","#f97316","#6b7280","#8b5cf6"];
-const ACCT_COLORS = {"飯能信金":"#3b82f6","青梅信金":"#22c55e","JPN(P)":"#f59e0b","JPN(I)":"#f97316","きらぼし銀行":"#ec4899"};
-const fmt = v => { if(v>=1e8) return (v/1e8).toFixed(1)+"億"; if(v>=1e4) return Math.round(v/1e4).toLocaleString()+"万"; return v.toLocaleString(); };
-const fmtYen = v => "¥"+Number(v).toLocaleString();
+const TOK={
+ dark:{bg:"#0b1220",panel:"#0e1a30",panel2:"#13233f",border:"rgba(148,163,184,.16)",divider:"rgba(148,163,184,.10)",text:"#e2e8f0",text2:"#94a3b8",muted:"#64748b",green:"#34d399",greenBg:"#0f2018",greenBd:"rgba(52,211,153,.26)",red:"#f87171",redBg:"#1a0e10",redBd:"rgba(248,113,113,.3)",amber:"#fbbf24",amberBg:"#1c1407",amberBd:"rgba(251,191,36,.4)",amberGlow:"rgba(251,191,36,.13)",violet:"#a78bfa",sky:"#38bdf8",skyBg:"#0c1d2e",skyBd:"rgba(56,189,248,.3)",gray:"#475569",grayBg:"rgba(148,163,184,.12)",accent:"#2dd4bf",accentBg:"#062b27",accentBd:"rgba(45,212,191,.45)",accentGlow:"rgba(45,212,191,.13)",navActive:"#13233f",grid:"#22304a"},
+ light:{bg:"#F2F2F7",panel:"#FFFFFF",panel2:"#F1F3F4",border:"#DADCE0",divider:"#E8EAED",text:"#202124",text2:"#5F6368",muted:"#80868B",green:"#0a7a44",greenBg:"#E6F4EA",greenBd:"rgba(15,157,88,.35)",red:"#D93025",redBg:"#FCEBEA",redBd:"rgba(217,48,37,.35)",amber:"#B26A00",amberBg:"#FEF7E0",amberBd:"rgba(180,106,0,.45)",amberGlow:"rgba(180,106,0,.12)",violet:"#7d2bc0",sky:"#007AFF",skyBg:"#E1F0FF",skyBd:"rgba(0,122,255,.3)",gray:"#C7C7CC",grayBg:"#F1F3F4",accent:"#0f766e",accentBg:"#E6F5F3",accentBd:"rgba(15,118,110,.4)",accentGlow:"rgba(15,118,110,.12)",navActive:"#E1F0FF",grid:"#E8EAED"}
+};
 
-function useWidth(){const[w,setW]=useState(window.innerWidth);useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h)},[]);return w;}
+const SEED={
+ months:['3月','4月','5月','6月','7月','8月','9月','10月','11月','12月','1月','2月'],
+ sales:[3605690,2411651,4605271,2580702,5557950,4496558,3365514,1149370,3423592,3830026,3069878,4941200],
+ budget:[4500000,4500000,4500000,4500000,6000000,5000000,5000000,5000000,4000000,4000000,4000000,4000000],
+ prevYear:[9794036,3118500,5236823,2586681,1720168,6214065,2578840,9903300,5966037,2158503,2158503,5276529],
+ balances:[6733305,7796039,8285973,7823141,8792669,8370783,6621282,3402263,3441097,5631691,6641478,5722632],
+ out:[3000000,2800000,3200000,2600000,4000000,3500000,3300000,3800000,3100000,3000000,2900000,2850000],
+ custLabels:['イデアファクトリー','小木製作所','吉川製作所','博明','ニシヤマ','その他'],
+ custData:[28044400,2436500,2546200,2200000,56100,1135246],
+ catLabels:['人件費','設備リース','融資返済','材料費','工具・消耗品','外注','電気','通信','保険','その他'],
+ catData:[1100000,620000,560000,480000,210000,180000,120000,45000,38000,90000],
+ fixedLabels:['人件費','設備返済','リース','地代家賃','保険','その他'],
+ fixedData:[1100000,560000,620000,200000,38000,120000],
+ tlLabels:['25/03','25/10','26/01','26/03','26/07','26/09','27/06','27/11','28/06','28/08','28/12','29/11'],
+ tlCum:[22220,641070,665270,706850,760359,800359,829509,843699,852842,1146047,1169655,1243981],
+ accts:[
+  {n:'JPN(I)',st:'連携済',stc:'green',bal:695968,draw:'引落 ¥16,660 ・ 余裕',drawc:'green',bar:'green'},
+  {n:'JPN(P)',st:'待機',stc:'gray',bal:18471,draw:'引落 ¥0 ・ 待機',drawc:'muted',bar:'gray'},
+  {n:'きらぼし',st:'不足',stc:'amber',bal:211716,draw:'引落 ¥850,000 ・ 不足',drawc:'red',bar:'amber'},
+  {n:'青梅信金',st:'ハブ',stc:'green',bal:4653929,draw:'引落 ¥1,200,000 ・ 入金予定',drawc:'green',bar:'green'},
+  {n:'飯能信金',st:'不足',stc:'red',bal:142548,draw:'引落 ¥780,000 ・ 不足',drawc:'red',bar:'red'}
+ ],
+ timeline:[
+  {d:'10日',t:'入金 イデアファクトリー',a:4941200,ac:'青梅',k:'in'},
+  {d:'10日',t:'政策金融公庫①/②GROB 融資',a:-15384,ac:'飯能'},
+  {d:'10日',t:'NB手数料 AMEX',a:-62975,ac:'各口座'},
+  {d:'12日',t:'風間電気管理事務所 施設',a:-16660,ac:'JPN(I)'},
+  {d:'20日',t:'青梅信金 融資返済(3件)',a:-680000,ac:'青梅',k:'warn'},
+  {d:'20日',t:'飯能信金 融資返済(3件)',a:-620000,ac:'飯能',k:'danger'},
+  {d:'20日',t:'白銅・ミスミ・日本工機センター等 材料',a:-350000,ac:'青梅',k:'warn'},
+  {d:'27日',t:'三菱UFJ・HCNBL等 リース',a:-450000,ac:'きらぼし',k:'warn'},
+  {d:'27日',t:'VW Polo + Tesla Model3 ローン',a:-180000,ac:'きらぼし',k:'warn'},
+  {d:'27日',t:'NCネットワーク・ヤマト・NTT等 その他',a:-80000,ac:'きらぼし',k:'warn'}
+ ],
+ sim:{cols:['JPN(I)','きらぼし','青梅信金','飯能信金'],
+  rows:[
+   {l:'月初残高',v:['¥695,968','¥211,716','¥4,653,929','¥142,548']},
+   {l:'入金予定',v:['¥0','¥0','+¥4,941,200','¥0'],c:[null,null,'green',null]},
+   {l:'支出予定',v:['−¥16,660','−¥850,000','−¥1,032,200','−¥635,384'],c:['red','red','red','red']},
+   {l:'移動前残高',v:['¥679,308','−¥638,284','¥8,562,929','−¥492,836'],bg:[null,'redBg',null,'redBg'],c:[null,'red',null,'red']},
+   {l:'資金移動',v:['−','←¥750,000','→¥1,350,000','←¥600,000'],bg:[null,'skyBg','skyBg','skyBg'],c:[null,'sky','sky','sky']},
+   {l:'移動後残高',v:['¥679,308','¥111,716','¥7,212,929','¥107,164'],c:['green','green','green','green']}
+  ]},
+ steps:['10日 イデア入金確認（青梅 +¥4,941,200）','10日中 青梅→きらぼし ¥750,000','10日中 青梅→飯能 ¥600,000','20日前 各残高再確認・不足あれば追加移動','27日前 きらぼしのリース引落し前に最終確認'],
+ payoff:[
+  {d:'25/03',n:'切削キャッチャー',m:22220,c:22220},
+  {d:'25/10',n:'★HARMRE',m:605850,c:641070,star:'red'},
+  {d:'26/01',n:'コピー複合機',m:24200,c:665270},
+  {d:'26/03',n:'hyperMILLオプション',m:41580,c:706850},
+  {d:'26/06',n:'政策金融公庫①',m:3709,c:710559},
+  {d:'26/07',n:'VW Polo',m:49800,c:760359},
+  {d:'26/08',n:'ドコモファイナンス(個人)',m:10000,c:770359},
+  {d:'26/09',n:'オリコクレスト(個人)',m:30000,c:800359},
+  {d:'27/06',n:'VISI-CAD',m:29150,c:829509},
+  {d:'27/11',n:'床洗浄機',m:14190,c:843699},
+  {d:'28/06',n:'飯能プロパー',m:9143,c:852842},
+  {d:'28/08',n:'★SSボンズ',m:293205,c:1146047,star:'amber'},
+  {d:'28/12',n:'政策金融公庫②+工場改築',m:23608,c:1169655},
+  {d:'29/11',n:'Tesla Model3',m:74326,c:1243981}
+ ],
+ orders:[
+  {n:'(株)イデアファクトリー ・ 量産 ・ 7〜9月',a:11200000},
+  {n:'(株)小木製作所 ・ 試作+量産 ・ 7〜8月',a:3800000},
+  {n:'その他 10件',a:3500000}
+ ]
+};
 
-const KPI=({label,value,sub,color,subColor,m})=>(<div style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",borderRadius:12,padding:m?"14px 16px":"18px 20px",flex:1,minWidth:m?140:180,border:"1px solid #334155"}}><div style={{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:6}}>{label}</div><div style={{fontSize:m?20:24,fontWeight:900,color:color||"#f1f5f9",letterSpacing:"-0.5px"}}>{value}</div>{sub&&<div style={{fontSize:11,color:subColor||"#64748b",marginTop:4,fontWeight:600}}>{sub}</div>}</div>);
-
-const Card=({title,children,wide})=>(<div style={{background:"#1e293b",borderRadius:12,padding:"16px 20px",border:"1px solid #334155",gridColumn:wide?"1/-1":undefined}}><div style={{fontSize:13,fontWeight:700,color:"#e2e8f0",marginBottom:12}}>{title}</div>{children}</div>);
-
-const CTip=({active,payload,label})=>{if(!active||!payload)return null;return(<div style={{background:"#0f172a",border:"1px solid #334155",borderRadius:8,padding:"10px 14px",fontSize:12}}><div style={{color:"#e2e8f0",fontWeight:700,marginBottom:4}}>{label}</div>{payload.map((p,i)=>(<div key={i} style={{color:p.color,marginBottom:2}}>{p.name}: {fmtYen(p.value)}</div>))}</div>);};
+const yen=v=>'¥'+Math.round(Number(v)).toLocaleString();
+const man=v=>(v/10000).toFixed(0)+'万';
+const mlabel=ym=>{if(ym==null)return'';const s=String(ym);const mt=s.match(/(\d{4})[-\/]?(\d{1,2})/);if(mt)return parseInt(mt[2],10)+'月';const dt=new Date(s);if(!isNaN(dt.getTime()))return(dt.getMonth()+1)+'月';return s;};
+const donutColors=t=>[t.sky,t.green,t.violet,"#fb923c","#22d3ee",t.gray];
 
 function App(){
-  const[tab,setTab]=useState("overview");
-  const w=useWidth();const m=w<810;
-  const c2=m?"1fr":"1fr 1fr";const c3=m?"1fr":"1fr 1fr 1fr";const c15=m?"1fr":"1.5fr 1fr";
-  const[data,setData]=useState(null);const[loading,setLoading]=useState(true);const[error,setError]=useState(null);
+ const[tab,setTab]=useState('sales');
+ const[theme,setTheme]=useState('dark');
+ const[d,setD]=useState(SEED);
+ const[live,setLive]=useState(false);
+ const[err,setErr]=useState(null);
+ const[op,setOp]=useState({orders:false,tl:false,sim:false,trend:false});
+ const t=TOK[theme];
+ const W=useWidth();const sm=W<860;
 
-  useEffect(()=>{
-    fetch(GAS_URL+"?key="+encodeURIComponent(API_KEY))
-      .then(r=>r.json()).then(d=>{if(d.error){setError(d.error)}else{setData(d)}setLoading(false)})
-      .catch(e=>{setError(e.message);setLoading(false)});
-  },[]);
+ useEffect(()=>{
+  Promise.all([
+   fetch(GAS_URL+"?key="+encodeURIComponent(API_KEY)).then(r=>r.json()),
+   fetch(ENGINE_URL+"?key="+encodeURIComponent(ENGINE_KEY)+"&fn=dashtx").then(r=>r.json()).catch(function(){return null;})
+  ]).then(function(res){
+   var j=res[0], tx=res[1];
+   if(j.error){setErr(j.error);return;}
+   if(tx && !tx.error){ j.transactions=tx; }
+   try{
+    const nd=JSON.parse(JSON.stringify(SEED));
+    const s=j.sales||[];
+    if(s.length){
+     nd.months=s.map(x=>x.month+'月');
+     nd.sales=s.map(x=>x.totalSales||0);
+     nd.budget=s.map(x=>x.budget||0);
+     nd.prevYear=s.map(x=>x.prevYearSales||0);
+    }
+    const tx=j.transactions||{};
+    const bt=tx.accountBalanceTrend||[];const an=[...new Set((tx.byAccount||[]).map(a=>a.name))];
+    if(bt.length){nd.balTrend=bt.map(b=>({m:mlabel(b.yearMonth),bal:an.reduce((s2,n)=>s2+(b[n]||0),0)}));}
+    const ba=tx.byAccount||[];if(ba.length){
+     nd.acctsLive=ba.filter(a=>a.lastBalance>0).map(a=>({n:a.name,bal:a.lastBalance}));
+     nd.totBalLive=ba.reduce((s2,a)=>s2+(a.lastBalance||0),0);
+    }
+    const po=j.payoffTimeline||[];if(po.length){
+     nd.payoff=po.map(p=>({d:p.endDate,n:(p.note==='★'||p.monthly>=2e5?'★':'')+p.lender+' '+(p.content||''),m:p.monthly,c:p.cumReduction,star:p.monthly>=5e5?'red':(p.monthly>=1e5?'amber':null)}));
+     nd.tlLabels=po.filter(p=>p.cumReduction>0).map(p=>p.endDate);nd.tlCum=po.filter(p=>p.cumReduction>0).map(p=>p.cumReduction);
+    }
+    const fx=j.fixedExpenses||{};if(fx.items&&fx.items.length){
+     const byc={};fx.items.forEach(it=>{byc[it.category]=(byc[it.category]||0)+(it.monthly||0)});
+     const ent=Object.entries(byc).sort((a,b)=>b[1]-a[1]);
+     const top=ent.slice(0,6);const rest=ent.slice(6).reduce((s2,e)=>s2+e[1],0);
+     nd.fixedLabels=top.map(e=>e[0]).concat(rest>0?['その他']:[]);
+     nd.fixedData=top.map(e=>e[1]).concat(rest>0?[rest]:[]);
+     nd.fixedTotal=fx.monthlyTotal;
+    }
+    setD(nd);setLive(true);
+   }catch(e){setErr('データ整形エラー: '+e.message);}
+  }).catch(e=>setErr(e.message));
+ },[]);
 
-  if(loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:900,marginBottom:12}}>GROOVE-WORKS</div><div style={{color:"#64748b"}}>データ取得中...</div></div></div>;
-  if(error) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:900,marginBottom:12,color:"#ef4444"}}>エラー</div><div style={{color:"#94a3b8",fontSize:13}}>{error}</div></div></div>;
-  if(!data) return null;
+ const latest=d.sales.length?d.sales[d.sales.length-1]:0;
+ const latestBudget=d.budget.length?d.budget[d.budget.length-1]:0;
+ const cumS=d.sales.reduce((a,b)=>a+b,0);
+ const cumB=d.budget.reduce((a,b)=>a+b,0);
+ const totBal=d.totBalLive!=null?d.totBalLive:d.balances[d.balances.length-1];
 
-  const sales=data.sales||[];const tx=data.transactions||{};const monthly=tx.monthly||[];const byCategory=tx.byCategory||[];const byAccount=tx.byAccount||[];const balanceTrend=tx.accountBalanceTrend||[];const custSales=tx.customerSales||[];const fixedExp=data.fixedExpenses||{items:[],monthlyTotal:0};const loans=data.loans||{items:[],monthlyTotal:0};const payoff=data.payoffTimeline||[];
+ const cl=k=>t[k]||k;
+ const card=(extra)=>({background:t.panel,border:"1px solid "+t.border,borderRadius:20,padding:18,...extra});
+ const mono={fontFamily:'"SF Mono",Menlo,Consolas,monospace',fontVariantNumeric:'tabular-nums',letterSpacing:'-.01em'};
 
-  const salesChart=sales.map(s=>({month:s.month+"月",actual:s.totalSales,budget:s.budget,prevYear:s.prevYearSales,rate:s.budget>0?Math.round(s.totalSales/s.budget*100):0}));
-  const latest=sales.length>0?sales[sales.length-1]:null;
-  const cumS=sales.reduce((a,s)=>a+(s.totalSales||0),0);const cumB=sales.reduce((a,s)=>a+(s.budget||0),0);
-  const totBal=byAccount.reduce((a,x)=>a+(x.lastBalance||0),0);
-  const sortAcct=[...byAccount].sort((a,b)=>b.lastBalance-a.lastBalance);
-  const acctNames=[...new Set(byAccount.map(a=>a.name))];
-  const balChart=balanceTrend.map(bt=>{const r={month:String(bt.yearMonth).replace(/^\d{4}-?/,"").replace(/^0/,"")+"月"};acctNames.forEach(n=>{r[n]=bt[n]||0});return r});
-  const cfChart=monthly.map(x=>({month:String(x.yearMonth).replace(/^\d{4}-?/,"").replace(/^0/,"")+"月",income:x.income,expense:x.expense,diff:x.income-x.expense}));
-  const topC=custSales.slice(0,5);const otherC=custSales.slice(5).reduce((a,c)=>a+c.value,0);
-  const custChart=[...topC.map((c,i)=>({...c,color:COLORS[i]}))];if(otherC>0)custChart.push({name:"その他",value:otherC,color:COLORS[6]});
+ const NAV=[
+  {id:'sales',label:'売上・受注',kick:'先行→結果',icon:'ph-chart-line-up',c:t.sky},
+  {id:'profit',label:'採算・利益',kick:'要因 ・ 新規',icon:'ph-scales',c:t.accent,badge:'新規'},
+  {id:'cash',label:'資金',kick:'命綱',icon:'ph-wallet',c:t.amber},
+  {id:'fin',label:'財務',kick:'体質',icon:'ph-flag-checkered',c:t.red}
+ ];
 
-  const now=new Date();const nowYM=now.getFullYear()+"/"+String(now.getMonth()+1).padStart(2,"0");
-  const doneN=payoff.filter(p=>p.endDate<=nowYM).length;const remainN=payoff.length-doneN;
-  const totReduc=payoff.reduce((a,p)=>a+p.monthly,0);
-  const nextP=payoff.filter(p=>p.endDate>nowYM).sort((a,b)=>a.endDate.localeCompare(b.endDate))[0];
+ // ---- reusable bits ----
+ const Kpi=({label,value,sub,vc,subc,accent,icon,ic})=>(
+  <div style={{background:t.panel,border:(accent?"1.5px solid "+t.accentBd:"1px solid "+t.border),borderRadius:16,padding:"15px 16px",boxShadow:accent?"0 0 0 3px "+t.accentGlow:"none"}}>
+   <div style={{fontSize:11,color:accent?t.accent:t.text2,marginBottom:8,display:'flex',alignItems:'center',gap:6,fontWeight:accent?500:400}}>{icon&&<i className={"ph "+icon}></i>}{label}</div>
+   <div className="mono" style={{fontSize:23,fontWeight:700,color:vc||t.text}}>{value}</div>
+   {sub&&<div style={{fontSize:11,color:subc||t.muted,marginTop:5}}>{sub}</div>}
+  </div>
+ );
+ const Note=({children,kind})=>{const bg=kind==='red'?t.redBg:kind==='amber'?t.amberBg:t.panel2,bd=kind==='red'?t.redBd:kind==='amber'?t.amberBd:t.border,tc=kind==='red'?t.red:kind==='amber'?t.amber:t.text2;
+  return <div style={{background:bg,border:"1px solid "+bd,borderLeft:"3px solid "+(kind==='red'?t.red:kind==='amber'?t.amber:t.border),borderRadius:12,padding:"12px 14px",fontSize:12.5,lineHeight:1.7,color:tc}}>{children}</div>;};
+ const Drill=({k,title,sub,children})=>(
+  <div style={{...card({padding:0,marginTop:12,overflow:'hidden'})}}>
+   <button data-drill={k} onClick={()=>setOp({...op,[k]:!op[k]})} style={{width:'100%',background:'transparent',border:'none',display:'flex',alignItems:'center',gap:10,padding:"14px 16px",cursor:'pointer',color:t.text,textAlign:'left'}}>
+    <i className={"ph "+(op[k]?'ph-caret-down':'ph-caret-right')} style={{color:t.muted}}></i>
+    <span style={{fontSize:13.5,fontWeight:600,flex:1}}>{title}{sub&&<span style={{color:t.muted,fontWeight:400,marginLeft:8,fontSize:12}}>{sub}</span>}</span>
+   </button>
+   {op[k]&&<div style={{padding:"0 16px 16px",borderTop:"1px solid "+t.divider}}>{children}</div>}
+  </div>
+ );
+ const tip=(o)=>(<div style={{background:t.panel,border:"1px solid "+t.border,borderRadius:8,padding:"8px 12px",fontSize:12}}>{o.active&&o.payload&&[<div key="l" style={{color:t.text,fontWeight:600,marginBottom:3}}>{o.label}</div>,...o.payload.map((p,i)=><div key={i} style={{color:p.color}}>{p.name}: {yen(p.value)}</div>)]}</div>);
+ const axis={tick:{fill:t.text2,fontSize:11},stroke:t.border};
 
-  return(<div>
-    <div style={{background:"linear-gradient(90deg,#1e293b,#0f172a)",borderBottom:"1px solid #334155",padding:m?"12px 16px":"16px 24px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
-        <div><div style={{fontSize:m?17:20,fontWeight:900,color:"#f1f5f9"}}>GROOVE-WORKS</div><div style={{fontSize:11,color:"#64748b",fontWeight:600}}>経営ダッシュボード ｜ 最終更新: {data.updatedAt?new Date(data.updatedAt).toLocaleString("ja-JP"):""}</div></div>
-        <div style={{display:"flex",gap:4,background:"#334155",borderRadius:8,padding:3}}>
-          {[["overview","経営概況"],["cashflow","資金繰り"],["payoff","完済タイムライン"]].map(([k,v])=>(<button key={k} onClick={()=>setTab(k)} style={{padding:"6px 16px",borderRadius:6,border:"none",background:tab===k?"#2563eb":"transparent",color:tab===k?"#fff":"#94a3b8",fontSize:12,fontWeight:700,cursor:"pointer"}}>{v}</button>))}
-        </div>
-      </div>
+ const SecHead=({n,title,q,nc,badge})=>(
+  <div style={{marginBottom:20}}>
+   <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+    <span className="mono" style={{color:nc,fontSize:13,fontWeight:700}}>{n}</span>
+    <span style={{fontSize:21,fontWeight:700,color:t.text,whiteSpace:'nowrap'}}>{title}</span>
+    {badge&&<span style={{fontSize:10,fontWeight:500,color:t.accent,background:t.accentBg,border:"1px solid "+t.accentBd,borderRadius:6,padding:"2px 7px"}}>新規</span>}
+   </div>
+   <div style={{fontSize:13,color:t.muted,marginTop:6}}>{q}</div>
+  </div>
+ );
+ const NextBtn=({to,label,c})=>(
+  <button onClick={()=>{setTab(to);window.scrollTo({top:0})}} style={{marginTop:18,background:c,color:'#fff',border:'none',borderRadius:12,padding:"12px 18px",fontSize:13,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8}}>{label}<i className="ph ph-arrow-right"></i></button>
+ );
+ const Unset=({label})=>(<span style={{fontSize:10,fontWeight:500,color:t.amber,background:t.amberBg,border:"1px solid "+t.amberBd,borderRadius:6,padding:"2px 7px",marginLeft:8}}>{label}</span>);
+
+ // ---- charts ----
+ const chartData=d.months.map((m,i)=>({month:m,actual:d.sales[i],budget:d.budget[i],prevYear:d.prevYear[i],rate:d.budget[i]?Math.round(d.sales[i]/d.budget[i]*100):0}));
+ const balData=d.balTrend||SEED.months.map((m,i)=>({m,bal:SEED.balances[i]}));
+ const cfData=SEED.months.map((m,i)=>({month:m,income:SEED.sales[i],expense:SEED.out[i],diff:SEED.sales[i]-SEED.out[i]}));
+ const custData=d.custLabels.map((n,i)=>({name:n,value:d.custData[i]}));
+ const catData=d.catLabels.map((n,i)=>({name:n,value:d.catData[i]})).sort((a,b)=>b.value-a.value);
+ const fixedData=d.fixedLabels.map((n,i)=>({name:n,value:d.fixedData[i]}));
+ const tlData=d.tlLabels.map((m,i)=>({d:m,cum:d.tlCum[i]}));
+ const custTotal=d.custData.reduce((a,b)=>a+b,0);const idePct=custTotal?Math.round(d.custData[0]/custTotal*100):0;
+
+ // ===== SECTIONS =====
+ const Sales=()=>(<div>
+  <SecHead n="①" title="売上・受注" nc={t.sky} q="受注（先）から売上（結果）まで ─ いくら売れて、この先いくら確保しているか"/>
+  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:12,marginBottom:12}}>
+   <Kpi label={"直近月売上 ・ "+d.months[d.months.length-1]} value={yen(latest)} vc={t.sky} sub={"予算比 "+(latestBudget?Math.round(latest/latestBudget*100):'—')+"%"} subc={t.green}/>
+   <Kpi label="年度累計売上" value={yen(cumS)} vc={t.green} sub={d.sales.length+"ヶ月合計"}/>
+   <Kpi label="年度予算達成率" value={(cumB?Math.round(cumS/cumB*100):'—')+"%"} vc={t.amber} sub={"予算 "+yen(cumB)}/>
+   <Kpi label="受注残" icon="ph-stack" accent value="未取得" vc={t.amber} sub="Salesforce未連携（先読み・接続待ち）"/>
+  </div>
+  <div style={{display:'grid',gridTemplateColumns:sm?'1fr':'1.6fr 1fr',gap:12,marginBottom:12}}>
+   <div style={card()}><div style={{fontSize:13,fontWeight:600,color:t.text,marginBottom:12}}>月別売上推移 ・ 実績 vs 予算 vs 前年</div>
+    <ResponsiveContainer width="100%" height={240}><ComposedChart data={chartData}><CartesianGrid strokeDasharray="3 3" stroke={t.grid}/><XAxis dataKey="month" {...axis}/><YAxis {...axis} tickFormatter={man}/><Tooltip content={tip}/><Legend wrapperStyle={{fontSize:11}}/><Bar dataKey="actual" name="実績" fill={t.sky} radius={[4,4,0,0]}/><Line dataKey="budget" name="予算" stroke={t.amber} strokeWidth={2} strokeDasharray="6 3" dot={false}/><Line dataKey="prevYear" name="前年" stroke={t.gray} strokeWidth={1.5} strokeDasharray="2 2" dot={false}/></ComposedChart></ResponsiveContainer>
+   </div>
+   <div style={card()}><div style={{fontSize:13,fontWeight:600,color:t.text,marginBottom:4,display:'flex',alignItems:'center',gap:6}}><i className="ph-fill ph-warning" style={{color:t.amber}}></i>取引先別 売上構成比{!live&&<Unset label="未確定"/>}</div>
+    <ResponsiveContainer width="100%" height={228}><PieChart><Pie data={custData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={42} outerRadius={74} paddingAngle={2} label={({percent})=>(percent*100).toFixed(0)+'%'} labelLine={false}>{custData.map((c,i)=><Cell key={i} fill={donutColors(t)[i%6]}/>)}</Pie><Tooltip formatter={v=>yen(v)}/><Legend wrapperStyle={{fontSize:10}}/></PieChart></ResponsiveContainer>
+   </div>
+  </div>
+  <div style={card({marginBottom:12})}><div style={{fontSize:13,fontWeight:600,color:t.text,marginBottom:12}}>月別 予算達成率</div>
+   <ResponsiveContainer width="100%" height={180}><BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" stroke={t.grid}/><XAxis dataKey="month" {...axis}/><YAxis {...axis} domain={[0,150]} tickFormatter={v=>v+'%'}/><Tooltip formatter={v=>v+'%'}/><Bar dataKey="rate" name="達成率" radius={[4,4,0,0]}>{chartData.map((x,i)=><Cell key={i} fill={x.rate>=100?t.green:t.amber}/>)}</Bar></BarChart></ResponsiveContainer>
+  </div>
+  <Note kind="amber"><b>判断：1社依存（イデア 約{idePct}%）。</b> この1社が大きく減ると損益分岐点を割り、赤字に直結。<b>打ち手：新規開拓で依存を下げる。</b><span style={{color:t.muted}}> ／ 取引先別は摘要テキストの構造化で算出（実装時対応・未確定）。</span></Note>
+  <Drill k="orders" title="受注残の内訳を見る" sub="12件 ・ Salesforce ・ 未取得">
+   <Note kind="amber"><i className="ph ph-info"></i> 受注残はSalesforce未連携のため未取得。接続後にここへ実データが入る。下は構造の例。</Note>
+   <div style={{marginTop:10}}>{d.orders.map((o,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',padding:"9px 2px",borderBottom:i<d.orders.length-1?"1px solid "+t.divider:'none',fontSize:13}}><span style={{color:t.text2}}>{o.n}</span><span className="mono" style={{color:t.muted}}>¥{o.a.toLocaleString()}</span></div>)}</div>
+  </Drill>
+  <NextBtn to="profit" label="次へ：採算で「儲かっているか」を確かめる" c={t.sky}/>
+ </div>);
+
+ const Profit=()=>(<div>
+  <SecHead n="②" title="採算・利益" nc={t.accent} q="その売上は、儲かっているか" badge/>
+  <Note kind="amber" >この段の数字（利益・限界利益・損益分岐点）は<b>未確定</b>。原価（材料・工具・電気の変動費＋人件費・設備返済の固定費）が未入力のため。下は会社全体・接続後の形。案件別原価は取得でき次第。</Note>
+  <div style={{...card({marginTop:12,border:"1.5px solid "+t.accentBd,boxShadow:"0 0 0 3px "+t.accentGlow})}}>
+   <div style={{fontSize:12,color:t.accent,marginBottom:8,display:'flex',alignItems:'center',gap:6}}><i className="ph-fill ph-scales"></i>今月の利益（会社全体）<Unset label="未確定"/></div>
+   <div className="mono" style={{fontSize:44,fontWeight:700,color:t.muted}}>¥ —</div>
+   <div style={{marginTop:14}}><div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:6}}><span style={{color:t.text2}}>黒字ラインまで</span><span style={{color:t.muted}}>原価データ接続後に算出</span></div>
+    <div style={{height:16,background:t.panel2,borderRadius:8,position:'relative',overflow:'hidden'}}><div style={{position:'absolute',left:'65%',top:0,bottom:0,width:2,background:t.muted}}></div></div>
+    <div style={{fontSize:11,color:t.muted,marginTop:5}}>縦線＝黒字ライン（損益分岐点）。バーがこれを越えれば黒字、下回れば赤字。</div></div>
+  </div>
+  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginTop:12}}>
+   <Kpi label="限界利益（売上−変動費）" value="未確定" vc={t.muted} sub="限界利益率 —"/>
+   <Kpi label="損益分岐点売上" value="未確定" vc={t.muted} sub="固定費 ÷ 限界利益率"/>
+   <Kpi label="安全余裕率" value="未確定" vc={t.muted} sub="あと何%減ると赤字か"/>
+  </div>
+  <div style={card({marginTop:12})}><div style={{fontSize:13,fontWeight:600,color:t.text,marginBottom:12}}>利益のなりたち</div>
+   <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:13}}>
+    {[['売上',yen(latest),t.text],['−','',t.muted],['変動費','未入力',t.muted],['−','',t.muted],['固定費','未入力',t.muted],['＝','',t.muted],['利益','未確定',t.muted]].map((x,i)=>x[0]==='−'||x[0]==='＝'?<span key={i} style={{color:t.muted,fontSize:16}}>{x[0]}</span>:<div key={i} style={{background:x[0]==='利益'?t.accentBg:t.panel2,border:x[0]==='利益'?"1px solid "+t.accentBd:'none',borderRadius:12,padding:"10px 14px",textAlign:'center'}}><div style={{fontSize:11,color:t.text2}}>{x[0]}</div><div className="mono" style={{fontWeight:700,color:x[2],marginTop:3}}>{x[1]}</div></div>)}
+   </div>
+  </div>
+  <div style={{marginTop:12}}><Note kind="red"><b>依存リスク × 採算：</b> イデア（約{idePct}%）が外れると売上は大きく落ち、損益分岐点を割って<b>赤字に転落</b>する構造。<b>打ち手：採算割れなら値決め見直し、依存高なら新規開拓。</b></Note></div>
+  <NextBtn to="cash" label="次へ：資金で「今日を落とさないか」を見る" c={t.sky}/>
+ </div>);
+
+ const acctBar=(k)=>({green:t.green,red:t.red,amber:t.amber,gray:t.gray})[k];
+ const Cash=()=>(<div>
+  <SecHead n="③" title="資金" nc={t.amber} q="今日を、落とさないか ─ 入金・支出・残高と、危ない口座の手当て"/>
+  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:12,marginBottom:12}}>
+   {[['口座合計残高',yen(totBal),t.violet,(d.acctsLive?d.acctsLive.length:5)+'口座合計'],['今月の支出予定',d.fixedTotal?yen(d.fixedTotal):'¥2,850,000',t.red,'融資・リース・固定費'],['今月の入金予定','¥4,941,200',t.green,'Salesforce商談ベース（未確定）'],['月末残高予測','¥7,813,832',t.sky,'入金−支出後（未確定）'],['残高不足口座','2口座',t.red,'きらぼし・飯能']].map((k,i)=>(
+    <div key={i} style={{background:t.panel,border:"1px solid "+t.border,borderLeft:"4px solid "+k[2],borderRadius:16,padding:"14px 15px"}}><div style={{fontSize:11,color:t.text2,marginBottom:7}}>{k[0]}</div><div className="mono" style={{fontSize:20,fontWeight:700,color:k[2]}}>{k[1]}</div><div style={{fontSize:11,color:t.muted,marginTop:5}}>{k[3]}</div></div>
+   ))}
+  </div>
+  <Note kind="red"><b>残高不足アラート ・ 2口座</b> ／ きらぼし：27日のリース・ローン引落しまでに約 ¥638,284 不足。飯能信金：20日の融資返済までに約 ¥635,384 不足。<b>→ 10日の入金後すぐ資金移動。</b></Note>
+  <div style={{fontSize:13,fontWeight:600,color:t.text,margin:"18px 0 10px"}}>口座ごとの状態</div>
+  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(175px,1fr))',gap:12}}>
+   {(d.acctsLive?d.acctsLive.map(a=>{const seed=SEED.accts.find(x=>a.n.indexOf(x.n)>=0||x.n.indexOf(a.n)>=0)||{};return{...seed,n:a.n,bal:a.bal};}):d.accts).map((a,i)=>(
+    <div key={i} style={{background:t.panel,border:"1px solid "+t.border,borderTop:"3px solid "+(acctBar(a.bar)||t.gray),borderRadius:16,padding:"14px 15px"}}>
+     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}><span style={{fontSize:13,fontWeight:600,color:t.text}}>{a.n}</span>{a.st&&<span style={{fontSize:10,fontWeight:500,color:cl(a.stc),background:a.stc==='gray'?t.grayBg:t[a.stc+'Bg']||t.panel2,borderRadius:6,padding:"2px 7px"}}>{a.st}</span>}</div>
+     <div className="mono" style={{fontSize:18,fontWeight:700,color:a.stc==='gray'?t.muted:t.sky}}>{yen(a.bal)}</div>
+     {a.draw&&<div style={{fontSize:11,color:a.drawc?cl(a.drawc):t.muted,marginTop:6}}>{a.draw}</div>}
     </div>
-
-    <div style={{padding:m?"16px":"20px 24px"}}>
-
-      {tab==="overview"&&(<>
-        <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
-          <KPI m={m} label={"直近月売上（"+(latest?latest.month:"")+"月）"} value={latest?fmtYen(latest.totalSales):"—"} sub={latest&&latest.budget?"予算比 "+Math.round(latest.totalSales/latest.budget*100)+"%":""} color="#60a5fa" subColor={latest&&latest.totalSales>=latest.budget?"#22c55e":"#ef4444"}/>
-          <KPI m={m} label="年度累計売上" value={fmtYen(cumS)} sub={sales.length+"ヶ月合計"} color="#4ade80"/>
-          <KPI m={m} label="口座合計残高" value={fmtYen(totBal)} color="#a78bfa"/>
-          <KPI m={m} label="年度予算達成率" value={cumB>0?Math.round(cumS/cumB*100)+"%":"—"} sub={"予算 "+fmtYen(cumB)} color="#fb923c"/>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:c15,gap:16,marginBottom:16}}>
-          <Card title="月別売上推移（実績 vs 予算 vs 前年）"><ResponsiveContainer width="100%" height={240}><ComposedChart data={salesChart}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis dataKey="month" tick={{fill:"#94a3b8",fontSize:11}}/><YAxis tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={fmt}/><Tooltip content={<CTip/>}/><Legend wrapperStyle={{fontSize:11}}/><Bar dataKey="actual" name="実績" fill="#3b82f6" radius={[4,4,0,0]}/><Line dataKey="budget" name="予算" stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 3" dot={false}/><Line dataKey="prevYear" name="前年" stroke="#6b7280" strokeWidth={1.5} dot={false}/></ComposedChart></ResponsiveContainer></Card>
-          <Card title="取引先別 売上構成比"><ResponsiveContainer width="100%" height={240}><PieChart><Pie data={custChart} dataKey="value" nameKey="name" cx="50%" cy="42%" innerRadius={45} outerRadius={78} paddingAngle={2} label={({percent})=>(percent*100).toFixed(0)+"%"} labelLine={false}>{custChart.map((c,i)=><Cell key={i} fill={c.color||COLORS[i]}/>)}</Pie><Tooltip formatter={v=>fmtYen(v)}/><Legend wrapperStyle={{fontSize:11}}/></PieChart></ResponsiveContainer></Card>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:c3,gap:16,marginBottom:16}}>
-          <Card title="口座合計残高推移"><ResponsiveContainer width="100%" height={240}><LineChart data={balChart}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis dataKey="month" tick={{fill:"#94a3b8",fontSize:10}}/><YAxis tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={fmt}/><Tooltip content={<CTip/>}/><Legend wrapperStyle={{fontSize:10}}/>{acctNames.map((n,i)=>(<Line key={n} dataKey={n} name={n} stroke={ACCT_COLORS[n]||COLORS[i%COLORS.length]} strokeWidth={1.5} dot={false}/>))}</LineChart></ResponsiveContainer></Card>
-          <Card title="カテゴリ別支出 TOP10"><ResponsiveContainer width="100%" height={240}><BarChart data={byCategory.slice(0,10)} layout="vertical" margin={{left:10}}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis type="number" tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={fmt}/><YAxis type="category" dataKey="name" tick={{fill:"#94a3b8",fontSize:10}} width={90}/><Tooltip formatter={v=>fmtYen(v)}/><Bar dataKey="value" name="支出額" radius={[0,4,4,0]}>{byCategory.slice(0,10).map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}</Bar></BarChart></ResponsiveContainer></Card>
-          <Card title="月別予算達成率"><ResponsiveContainer width="100%" height={240}><BarChart data={salesChart}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis dataKey="month" tick={{fill:"#94a3b8",fontSize:10}}/><YAxis tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={v=>v+"%"} domain={[0,150]}/><Tooltip formatter={v=>v+"%"}/><Bar dataKey="rate" name="達成率" radius={[4,4,0,0]}>{salesChart.map((d,i)=><Cell key={i} fill={d.rate>=100?"#22c55e":d.rate>=80?"#f59e0b":"#ef4444"}/>)}</Bar></BarChart></ResponsiveContainer>
-            <div style={{display:"flex",gap:12,marginTop:4,justifyContent:"center"}}>{[["#22c55e","100%↑"],["#f59e0b","80〜99%"],["#ef4444","80%↓"]].map(([c,l])=>(<div key={l} style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#94a3b8"}}><div style={{width:8,height:8,borderRadius:2,background:c}}/>{l}</div>))}</div>
-          </Card>
-        </div>
-      </>)}
-
-      {tab==="cashflow"&&(<>
-        <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
-          <KPI m={m} label="口座合計残高" value={fmtYen(totBal)} color="#a78bfa"/>
-          <KPI m={m} label="月額固定費合計" value={fmtYen(fixedExp.monthlyTotal)} color="#ef4444"/>
-          <KPI m={m} label="うち融資・リース返済" value={fmtYen(loans.monthlyTotal)} color="#f59e0b"/>
-          <KPI m={m} label="固定費項目数" value={fixedExp.items.length+"件"} color="#60a5fa"/>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:c2,gap:16,marginBottom:16}}>
-          <Card title="月別 入金 vs 出金 vs 差引"><ResponsiveContainer width="100%" height={260}><ComposedChart data={cfChart}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis dataKey="month" tick={{fill:"#94a3b8",fontSize:11}}/><YAxis tick={{fill:"#94a3b8",fontSize:11}} tickFormatter={fmt}/><Tooltip content={<CTip/>}/><Legend wrapperStyle={{fontSize:11}}/><Bar dataKey="income" name="入金" fill="#3b82f6" radius={[4,4,0,0]}/><Bar dataKey="expense" name="出金" fill="#ef4444" radius={[4,4,0,0]}/><Line dataKey="diff" name="差引" stroke="#22c55e" strokeWidth={2} dot={{r:3}}/></ComposedChart></ResponsiveContainer></Card>
-          <Card title="口座別残高"><div style={{marginTop:8}}>{sortAcct.filter(a=>a.lastBalance>0).map(a=>{const pct=totBal>0?(a.lastBalance/totBal*100):0;const cl=ACCT_COLORS[a.name]||"#6b7280";return(<div key={a.name} style={{marginBottom:14}}><div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"#e2e8f0",fontWeight:600}}>{a.name}</span><span style={{color:cl,fontWeight:700}}>{fmtYen(a.lastBalance)}</span></div><div style={{background:"#334155",borderRadius:4,height:8}}><div style={{background:cl,borderRadius:4,height:8,width:pct+"%"}}/></div></div>)})}</div></Card>
-        </div>
-        <Card title="固定費内訳" wide><div style={{display:"grid",gridTemplateColumns:m?"1fr":"1fr 1fr 1fr",gap:"4px 24px",fontSize:12}}>{fixedExp.items.map((it,i)=>(<div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #334155"}}><span style={{color:"#94a3b8"}}>{it.category} / {it.description}</span><span style={{color:"#e2e8f0",fontWeight:600,flexShrink:0,marginLeft:8}}>{fmtYen(it.monthly)}</span></div>))}</div></Card>
-      </>)}
-
-      {tab==="payoff"&&(<>
-        <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
-          <KPI m={m} label="完済済み" value={doneN+"件"} color="#22c55e"/>
-          <KPI m={m} label="残り" value={remainN+"件"} color="#f59e0b"/>
-          <KPI m={m} label="次の完済" value={nextP?nextP.lender+" "+nextP.endDate:"—"} sub={nextP?"月額 "+fmtYen(nextP.monthly)+" の削減":""} color="#60a5fa" subColor="#22c55e"/>
-          <KPI m={m} label="全完済後の月額削減" value={fmtYen(totReduc)} color="#a78bfa"/>
-        </div>
-        <Card title="完済タイムライン" wide><div style={{marginTop:8}}>{payoff.map((p,i)=>{const done=p.endDate<=nowYM;const maxM=(2034-2024)*12;const pts=p.endDate.split("/");const eM=(parseInt(pts[0])-2024)*12+(parseInt(pts[1])||0);const wP=Math.min(eM/maxM*100,100);return(<div key={i} style={{display:"flex",alignItems:"center",gap:m?6:12,marginBottom:8,fontSize:m?11:12,flexWrap:m?"wrap":"nowrap"}}><div style={{minWidth:m?120:220,color:done?"#22c55e":"#e2e8f0",fontWeight:600,textDecoration:done?"line-through":"none"}}>{done?"✅ ":""}{p.lender} {p.content}</div><div style={{flex:1,minWidth:m?"100%":200,background:"#334155",borderRadius:4,height:24,overflow:"hidden"}}><div style={{width:wP+"%",height:"100%",borderRadius:4,background:done?"#22c55e":wP>70?"#3b82f6":wP>40?"#f59e0b":"#ef4444",display:"flex",alignItems:"center",paddingLeft:8,color:"#fff",fontSize:10,fontWeight:700}}>{p.endDate}</div></div><div style={{minWidth:100,textAlign:"right",color:"#94a3b8"}}>月額 {fmtYen(p.monthly)}</div></div>)})}</div></Card>
-        <div style={{display:"grid",gridTemplateColumns:c2,gap:16,marginTop:16}}>
-          <Card title="累計削減効果"><ResponsiveContainer width="100%" height={240}><ComposedChart data={payoff.filter(p=>p.cumReduction>0)}><CartesianGrid strokeDasharray="3 3" stroke="#334155"/><XAxis dataKey="endDate" tick={{fill:"#94a3b8",fontSize:10}}/><YAxis tick={{fill:"#94a3b8",fontSize:10}} tickFormatter={fmt}/><Tooltip formatter={v=>fmtYen(v)}/><Area dataKey="cumReduction" name="累計削減" fill="#22c55e" fillOpacity={0.2} stroke="#22c55e" strokeWidth={2}/></ComposedChart></ResponsiveContainer></Card>
-          <Card title="マイルストーン"><div style={{fontSize:12,lineHeight:2}}>{payoff.map((p,i)=>{const done=p.endDate<=nowYM;const cl=done?"#22c55e":p.monthly>=1e5?"#ef4444":p.monthly>=2e4?"#f59e0b":"#3b82f6";return(<div key={i} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"4px 0",borderBottom:"1px solid #334155"}}><span style={{color:cl,fontWeight:700,minWidth:70,flexShrink:0}}>{p.endDate}</span><span style={{color:done?"#64748b":"#e2e8f0",flex:1,textDecoration:done?"line-through":"none"}}>{p.lender} {p.content}</span><span style={{color:"#94a3b8",flexShrink:0}}>月{fmtYen(p.monthly)}</span>{p.note&&<span style={{color:cl,fontWeight:700,fontSize:10,background:cl+"20",padding:"2px 8px",borderRadius:99,flexShrink:0}}>{p.note}</span>}</div>)})}</div></Card>
-        </div>
-      </>)}
-
-      <div style={{textAlign:"center",padding:"24px 0 8px",fontSize:10,color:"#475569"}}>GROOVE-WORKS 経営ダッシュボード ｜ 自動取得</div>
+   ))}
+  </div>
+  <Drill k="tl" title="今月の入出金タイムライン" sub="日付ごとの全明細">
+   <div style={{marginTop:6}}>{d.timeline.map((r,i)=>{const bg=r.k==='in'?t.greenBg:r.k==='danger'?t.redBg:r.k==='warn'?t.amberBg:'transparent';return(
+    <div key={i} style={{display:'grid',gridTemplateColumns:'52px 1fr auto',gap:10,alignItems:'center',padding:"10px 8px",borderRadius:8,background:bg,marginBottom:2}}>
+     <span className="mono" style={{fontSize:12,fontWeight:600,color:t.text2}}>{r.d}</span>
+     <span style={{fontSize:12.5,color:t.text2}}>{r.t}<span style={{color:t.muted,fontSize:11}}> ・ {r.ac}</span></span>
+     <span className="mono" style={{fontSize:13,fontWeight:600,color:r.a>=0?t.green:t.red}}>{r.a>=0?'+':'−'}¥{Math.abs(r.a).toLocaleString()}</span>
+    </div>);})}</div>
+  </Drill>
+  <Drill k="sim" title="資金移動シミュレーション" sub="移動前→移動→移動後 ＋実行手順">
+   <div style={{overflowX:'auto',marginTop:8}}><div style={{minWidth:540}}>
+    <div style={{display:'grid',gridTemplateColumns:'90px repeat(4,1fr)',gap:6,fontSize:12}}>
+     <div></div>{d.sim.cols.map((c,i)=><div key={i} style={{textAlign:'right',color:t.text2,fontWeight:600,padding:"6px 8px"}}>{c}</div>)}
+     {d.sim.rows.map((row,ri)=>[<div key={'l'+ri} style={{color:t.muted,padding:"9px 4px",fontWeight:row.l.indexOf('移動')>=0?600:400}}>{row.l}</div>,
+      ...row.v.map((v,ci)=><div key={ri+'-'+ci} className="mono" style={{textAlign:'right',padding:"9px 8px",borderRadius:6,background:row.bg&&row.bg[ci]?t[row.bg[ci]]:'transparent',color:row.c&&row.c[ci]?cl(row.c[ci]):t.text2,fontWeight:600}}>{v}</div>)])}
     </div>
-  </div>);
+   </div></div>
+   <div style={{...card({marginTop:14,background:t.panel2,border:'none'})}}><div style={{fontSize:13,fontWeight:600,color:t.text,marginBottom:8}}>実行手順</div>
+    {d.steps.map((s,i)=><div key={i} style={{fontSize:13,color:t.text2,padding:"5px 0",lineHeight:1.6}}><span style={{color:t.sky,fontWeight:600}}>{i+1}. </span>{s}</div>)}
+   </div>
+  </Drill>
+  <Drill k="trend" title="推移・内訳" sub="残高推移 ・ 入金vs出金 ・ 支出TOP10 ・ 固定費内訳">
+   <div style={{display:'grid',gridTemplateColumns:sm?'1fr':'1fr 1fr',gap:16,marginTop:8}}>
+    <div><div style={{fontSize:12,color:t.text2,marginBottom:8}}>口座合計残高の推移</div><ResponsiveContainer width="100%" height={190}><AreaChart data={balData} margin={{top:10,right:14,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={t.grid}/><XAxis dataKey="m" {...axis}/><YAxis {...axis} tickFormatter={man} width={46}/><Tooltip formatter={v=>yen(v)}/><Area dataKey="bal" name="残高" stroke={t.violet} fill={t.violet} fillOpacity={.15} strokeWidth={2}/></AreaChart></ResponsiveContainer></div>
+    <div><div style={{fontSize:12,color:t.text2,marginBottom:8}}>月別 入金 vs 出金 vs 差引 <span style={{color:t.muted}}>（概算）</span></div><ResponsiveContainer width="100%" height={190}><ComposedChart data={cfData} margin={{top:10,right:14,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={t.grid}/><XAxis dataKey="month" {...axis}/><YAxis {...axis} tickFormatter={man} width={46}/><Tooltip content={tip}/><Bar dataKey="income" name="入金" fill={t.green} radius={[3,3,0,0]}/><Bar dataKey="expense" name="出金" fill={t.red} radius={[3,3,0,0]}/><Line dataKey="diff" name="差引" stroke={t.sky} strokeWidth={2} dot={false}/></ComposedChart></ResponsiveContainer></div>
+    <div><div style={{fontSize:12,color:t.text2,marginBottom:8}}>カテゴリ別 支出 TOP10 <span style={{color:t.muted}}>（概算）</span></div><ResponsiveContainer width="100%" height={210}><BarChart data={catData} layout="vertical" margin={{top:4,right:14,left:8,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={t.grid}/><XAxis type="number" {...axis} tickFormatter={man}/><YAxis type="category" dataKey="name" {...axis} width={84}/><Tooltip formatter={v=>yen(v)}/><Bar dataKey="value" name="支出" fill={t.sky} radius={[0,3,3,0]}/></BarChart></ResponsiveContainer></div>
+    <div><div style={{fontSize:12,color:t.text2,marginBottom:8}}>固定費の内訳</div><ResponsiveContainer width="100%" height={230}><PieChart><Pie data={fixedData} dataKey="value" nameKey="name" cx="50%" cy="42%" innerRadius={40} outerRadius={70} paddingAngle={2}>{fixedData.map((c,i)=><Cell key={i} fill={donutColors(t)[i%6]}/>)}</Pie><Tooltip formatter={v=>yen(v)}/><Legend wrapperStyle={{fontSize:10}}/></PieChart></ResponsiveContainer></div>
+   </div>
+  </Drill>
+  <div style={{marginTop:12}}><Note>未連携（JPN・PayPay）は残高が未取得。スキャン未取込・MF未連携で金額が欠ける箇所は「未取得／未確定」と明示（入力忘れの保険）。</Note></div>
+  <NextBtn to="fin" label="次へ：財務で「体質が軽くなる節目」を見る" c={t.sky}/>
+ </div>);
+
+ const Fin=()=>(<div>
+  <SecHead n="④" title="財務" nc={t.red} q="返済が減ると固定費が減る ─ 完済の節目で、会社の体質が軽くなる"/>
+  <div style={{display:'grid',gridTemplateColumns:sm?'1fr':'1fr 1fr',gap:12,marginBottom:14}}>
+   <div style={card({background:t.redBg,border:"1px solid "+t.redBd})}><div style={{fontSize:12,color:t.text2,marginBottom:6}}>2025/10 完済 ・ HARMRE</div><div className="mono" style={{fontSize:24,fontWeight:700,color:t.red}}>−¥605,850 <span style={{fontSize:13,color:t.muted}}>/月</span></div><div style={{fontSize:12,color:t.muted,marginTop:5}}>最大の削減。完済済み。</div></div>
+   <div style={card({background:t.amberBg,border:"1px solid "+t.amberBd})}><div style={{fontSize:12,color:t.text2,marginBottom:6}}>2028/08 完済 ・ SSボンズ</div><div className="mono" style={{fontSize:24,fontWeight:700,color:t.amber}}>−¥293,205 <span style={{fontSize:13,color:t.muted}}>/月</span></div><div style={{fontSize:12,color:t.muted,marginTop:5}}>工場リフォーム。次の節目。</div></div>
+  </div>
+  <div style={card()}><div style={{fontSize:13,fontWeight:600,color:t.text,marginBottom:12}}>完済タイムライン ・ 完済するたび月額固定費が減る</div>
+   {d.payoff.map((p,i)=>{const star=p.star;return(
+    <div key={i} style={{display:'grid',gridTemplateColumns:'62px 1fr 122px 122px',gap:8,alignItems:'center',padding:"9px 4px",borderBottom:i<d.payoff.length-1?"1px solid "+t.divider:'none'}}>
+     <span className="mono" style={{fontSize:12,fontWeight:star?700:400,color:star?cl(star):t.text2}}>{p.d}</span>
+     <span style={{fontSize:13,fontWeight:star?700:400,color:star?cl(star):t.text}}>{p.n}</span>
+     <span className="mono" style={{fontSize:12.5,textAlign:'right',fontWeight:star?700:400,color:star?cl(star):t.text2}}>¥{p.m.toLocaleString()}/月</span>
+     <span className="mono" style={{fontSize:11.5,textAlign:'right',color:t.muted}}>累計 ¥{(p.c||0).toLocaleString()}</span>
+    </div>);})}
+   <div style={{marginTop:14}}><Note kind="amber"><b>HARMRE → 月60万円削減 ／ SSボンズ → さらに月29万円削減。</b> この2つで月額 約90万円のキャッシュフロー改善。</Note></div>
+  </div>
+  <div style={card({marginTop:12})}><div style={{fontSize:13,fontWeight:600,color:t.text,marginBottom:12}}>累計削減額（月額）の推移</div>
+   <ResponsiveContainer width="100%" height={190}><AreaChart data={tlData}><CartesianGrid strokeDasharray="3 3" stroke={t.grid}/><XAxis dataKey="d" {...axis}/><YAxis {...axis} tickFormatter={man}/><Tooltip formatter={v=>"累計 月額 "+yen(v)+" 削減"}/><Area dataKey="cum" name="累計削減" stroke={t.green} fill={t.green} fillOpacity={.15} strokeWidth={2}/></AreaChart></ResponsiveContainer>
+  </div>
+ </div>);
+
+ return(
+  <div style={{display:'flex',minHeight:'100vh',background:t.bg,color:t.text}}>
+   {/* sidebar */}
+   <div style={{width:sm?64:236,flexShrink:0,position:'sticky',top:0,height:'100vh',background:t.panel,borderRight:"1px solid "+t.border,padding:sm?"18px 8px":"22px 16px",display:'flex',flexDirection:'column'}}>
+    {!sm&&<div style={{marginBottom:18}}><div style={{fontSize:15,fontWeight:700,color:t.text}}>経営ダッシュボード</div><div style={{fontSize:11,color:t.muted,marginTop:2}}>GROOVE WORKS ・ 2025年度</div></div>}
+    {!sm&&<div style={{fontSize:10,fontWeight:600,color:t.muted,letterSpacing:'.08em',marginBottom:8}}>経営の鎖</div>}
+    {NAV.map((nv,i)=>{const a=tab===nv.id;return(
+     <div key={nv.id}>
+      <button onClick={()=>{setTab(nv.id);window.scrollTo({top:0})}} title={nv.label} style={{display:'flex',alignItems:'center',gap:11,width:'100%',padding:sm?"9px 6px":"9px 8px",borderRadius:11,border:'none',cursor:'pointer',background:a?t.navActive:'transparent',boxShadow:a?"inset 0 0 0 1.5px "+nv.c:'none',marginBottom:2,textAlign:'left'}}>
+       <span style={{width:30,height:30,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0,background:a?nv.c:t.panel2,color:a?'#fff':t.text2}}><i className={"ph "+nv.icon}></i></span>
+       {!sm&&<span style={{flex:1,minWidth:0}}><span style={{display:'block',fontSize:9.5,color:t.muted}}>{nv.kick}</span><span style={{display:'block',fontSize:13.5,fontWeight:600,color:a?t.text:t.text2}}>{nv.label}{nv.badge&&<span style={{fontSize:9,color:t.accent,marginLeft:5}}>新規</span>}</span></span>}
+       {!sm&&<i className="ph ph-caret-right" style={{color:t.muted,opacity:a?.9:0,fontSize:12}}></i>}
+      </button>
+      {i<NAV.length-1&&!sm&&<div className="navline" style={{background:t.divider}}></div>}
+     </div>);})}
+    <div style={{marginTop:'auto'}}>
+     {live?<div style={{fontSize:10,color:t.green,marginBottom:8,display:sm?'none':'flex',alignItems:'center',gap:5}}><i className="ph-fill ph-circle" style={{fontSize:7}}></i>実データ取得済</div>:err?<div style={{fontSize:10,color:t.amber,marginBottom:8,display:sm?'none':'block'}}>静的データ表示中</div>:null}
+     <div style={{display:'flex',background:t.panel2,borderRadius:10,padding:3}}>
+      {[['dark','ダーク','ph-moon'],['light','ライト','ph-sun']].map(m=>(
+       <button key={m[0]} onClick={()=>setTheme(m[0])} style={{flex:1,border:'none',cursor:'pointer',borderRadius:8,padding:sm?"7px 0":"7px 6px",fontSize:11,fontWeight:600,background:theme===m[0]?t.navActive:'transparent',color:theme===m[0]?t.text:t.muted,display:'flex',alignItems:'center',justifyContent:'center',gap:5}}><i className={"ph "+m[2]}></i>{!sm&&m[1]}</button>
+      ))}
+     </div>
+    </div>
+   </div>
+   {/* main */}
+   <div style={{flex:1,minWidth:0,maxWidth:1180,padding:sm?"22px 16px 60px":"30px 36px 64px"}}>
+    {err&&<div style={{...card({background:t.amberBg,border:"1px solid "+t.amberBd,marginBottom:16})}}><span style={{color:t.amber,fontSize:12.5}}>⚠ GAS取得に失敗（{err}）。既知の静的データで表示中。</span></div>}
+    {tab==='sales'&&<Sales/>}{tab==='profit'&&<Profit/>}{tab==='cash'&&<Cash/>}{tab==='fin'&&<Fin/>}
+    <div style={{textAlign:'center',padding:"28px 0 8px",fontSize:10,color:t.muted}}>GROOVE-WORKS 経営ダッシュボード ・ v5</div>
+   </div>
+  </div>
+ );
 }
-
-ReactDOM.render(<App/>, document.getElementById("root"));
+function useWidth(){const[w,setW]=useState(typeof window!=='undefined'?window.innerWidth:1200);useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener('resize',h);return()=>window.removeEventListener('resize',h)},[]);return w;}
+ReactDOM.render(<App/>,document.getElementById('root'));
 </script>
 </body>
 </html>
